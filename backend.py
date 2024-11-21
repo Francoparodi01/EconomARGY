@@ -44,6 +44,11 @@ def send_telegram_message(message: str):
     except Exception as e:
         print(f"Error al enviar mensaje a Telegram: {e}")
 
+@APP.post("/")
+def root():
+    return {"message": "Hello World"}
+
+
 # Ruta para obtener la cotización más reciente del dólar
 @APP.get("/dolares")
 def cotizacion_dolar():
