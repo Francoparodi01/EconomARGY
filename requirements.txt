@@ -1,3 +1,3 @@
-python-bot-telegram 
+python-bot-telegram: 11.1.0
 fastapi
 uvicorn[standard]
