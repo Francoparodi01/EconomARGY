@@ -1,30 +1,17 @@
 from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackContext, ContextTypes, MessageHandler, filters
 import requests
-from fastapi import FastAPI
-import uvicorn
 from multiprocessing import Process
+from dotenv import load_dotenv 
+import os 
 
 # Variables de .env
-token = '7854598944:AAFaTWosQnasErlclPxlmZQrE0IwyYscUl0'
-userName = "Economargy_bot"
+load_dotenv()
 
-# Inicialización de FastAPI
-APP = FastAPI()
-
-# URL de la API de Dólares
-url_ambito = 'https://dolarapi.com/v1/ambito/dolares'
-
-# Endpoint de FastAPI
-@APP.get("/dolares")
-def read_item():
-    try:
-        response = requests.get(url_ambito)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        print(e)
-        return {"error": "No se pudo obtener el valor del dólar."}
+# Token y nombre de usuario del bot
+token = os.getenv("Telegram_Token")
+userName = os.getenv("Telegram_Username")
+backend_url = os.getenv("Backend_URL")
 
 # Funciones del Bot
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -49,7 +36,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_dolar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # Solicitar los datos de la API local de FastAPI
-        response = requests.get("http://127.0.0.1:8000/dolares")
+        response = requests.get(f"{backend_url}/dolares")
         response.raise_for_status()
         data = response.json()
 
@@ -84,32 +71,22 @@ async def get_dolar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"Ocurrió un error: {e}")
 
-# Función para ejecutar el servidor FastAPI
-def run_fastapi():
-    uvicorn.run(APP, host="127.0.0.1", port=8000)
+
 
 # Main
 if __name__ == '__main__':
-    print("Iniciando el servidor FastAPI...")
-    # Ejecutar FastAPI en un proceso separado
-    fastapi_process = Process(target=run_fastapi)
-    fastapi_process.start()
+    print("Iniciando el bot de Telegram...")
+    app = Application.builder().token(token).build()
 
-    try:
-        print("Iniciando el bot de Telegram...")
-        app = Application.builder().token(token).build()
+    # Manejar comandos
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("dolar", get_dolar))
 
-        # Manejar comandos
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(CommandHandler("dolar", get_dolar))
+    # Manejar mensajes de texto
+    app.add_handler(MessageHandler(filters.TEXT & filters.TEXT, handle_message))
 
-        # Manejar mensajes de texto
-        app.add_handler(MessageHandler(filters.TEXT & filters.TEXT, handle_message))
+    # Manejar errores
+    app.add_error_handler(error)
 
-        # Manejar errores
-        app.add_error_handler(error)
-
-        print("¡Bot de Telegram iniciado!")
-        app.run_polling(poll_interval=1, timeout=5)
-    finally:
-        fastapi_process.terminate()  # Detener FastAPI al cerrar el bot
+    print("¡Bot de Telegram iniciado!")
+    app.run_polling(poll_interval=1, timeout=5)
