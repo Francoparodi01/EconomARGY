@@ -20,6 +20,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error(update: Update, context: CallbackContext):
     await update.message.reply_text("An error has occurred.")
 
+async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("¡Hola! Soy tu bot económico. Puedes consultar:\n"
+        " - /bot_status: Verificar el estado del bot.\n"
+        " - /dolar : Para consultar por el precio del dólar oficial.\n"
+        " - /dolar [tipo]: Consultar el precio del dólar.\n"
+        " - /reservas_internacionales: Datos de las reservas internacionales.\n"
+        " - /inflacion: Datos de la inflación.\n"
+        " - /base_monetaria: Datos de la base monetaria.\n"
+        " - /graficar_base: Gráfico de la base monetaria.\n"
+        " - /graficar_inflacion: Gráfico de la inflación.\n"
+        " - /web: Sitio web de datos económicos."
+    )
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.lower()
     print(f"Received message: {text}")
@@ -81,6 +95,7 @@ if __name__ == '__main__':
     # Manejar comandos
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("dolar", get_dolar))
+    app.add_handler(CommandHandler("help", help))
 
     # Manejar mensajes de texto
     app.add_handler(MessageHandler(filters.TEXT & filters.TEXT, handle_message))
