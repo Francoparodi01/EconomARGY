@@ -4,6 +4,9 @@ from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
 from telegram import Bot
+from pymongo import MongoClient
+from bson import ObjectId
+
 
 # Cargar las variables de entorno
 load_dotenv()
@@ -18,21 +21,37 @@ class Dolar(BaseModel):
     venta: float
     fecha: str
 
+def serialize_objectid(data):
+    if isinstance(data, dict):
+        return {key: serialize_objectid(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [serialize_objectid(item) for item in data]
+    elif isinstance(data, ObjectId):
+        return str(data)
+    return data
+
 # Variables globales
 last_dolar_values = {}
 telegram_token = os.getenv("Telegram_Token")
 chat_id = os.getenv("chat_id")
 url_ambito = os.getenv("url_ambito")
 
-# Inicializar el bot de Telegram
+
+# Crear el bot de Telegram
 bot = Bot(token=telegram_token)
 
-# Función para obtener los valores del dólar desde la API
+# conexión con la BD
+MONGO_URI = os.getenv("MONGO_URI")
+client = MongoClient(MONGO_URI)
+db = client["cotizaciones"]  
+collection = db["dolar"]  
+
+# Función para obtener los valores del dólar desde la API o HTML
 def get_dolar_values():
     try:
         response = requests.get(url_ambito)
-        response.raise_for_status()
-        return response.json()
+        response.raise_for_status()  
+        return response.json()  
     except requests.exceptions.RequestException as e:
         print(f"Error al obtener datos: {e}")
         return None
@@ -44,10 +63,24 @@ def send_telegram_message(message: str):
     except Exception as e:
         print(f"Error al enviar mensaje a Telegram: {e}")
 
-@APP.post("/")
-def root():
-    return {"message": "Hello World"}
-
+# Función para guardar los valores en MongoDB
+def save_dolar_to_db(dolar_data):
+    for dolar in dolar_data:
+        # Verificar si ya existe el valor para esta casa
+        existing_data = collection.find_one({"casa": dolar['casa']})
+        if existing_data:
+            # Si existe, actualizar los valores
+            collection.update_one(
+                {"casa": dolar['casa']},
+                {"$set": {
+                    "compra": dolar['compra'],
+                    "venta": dolar['venta'],
+                    "fecha": dolar['fecha']
+                }}
+            )
+        else:
+            # Si no existe, insertar nuevo documento
+            collection.insert_one(dolar)
 
 # Ruta para obtener la cotización más reciente del dólar
 @APP.get("/dolares")
@@ -88,6 +121,7 @@ def read_dolar():
                 "fecha": dolar["fechaActualizacion"]
             })
 
+        # Actualizar el último valor para la próxima comparación
         last_dolar_values[casa] = {"compra": compra, "venta": venta}
 
     if changes:
@@ -98,8 +132,15 @@ def read_dolar():
             message += f"🟢 Compra: {change['compra']} ARS\n"
             message += f"🔴 Venta: {change['venta']} ARS\n"
             message += f"📅 Fecha de actualización: {change['fecha']}\n\n"
+        
+        # Guardar los cambios en la base de datos
+        save_dolar_to_db(changes)
+
+        # Enviar el mensaje al bot de Telegram
         send_telegram_message(message)
-        return changes
+
+        # Asegúrate de serializar los cambios antes de devolverlos
+        return serialize_objectid(changes)
     else:
         return {"message": "No hay cambios en los valores del dólar"}
 

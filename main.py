@@ -4,6 +4,8 @@ import requests
 from multiprocessing import Process
 from dotenv import load_dotenv 
 import os 
+import aiohttp
+
 
 # Variables de .env
 load_dotenv()
@@ -47,12 +49,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(response)
 
+# Sitio inicial bot
 async def get_dolar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        # Solicitar los datos de la API local de FastAPI
-        response = requests.get(f"{backend_url}/dolares")
-        response.raise_for_status()
-        data = response.json()
+        # Usando aiohttp en lugar de requests para hacer una solicitud asincrónica
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{backend_url}/dolares") as response:
+                response.raise_for_status()
+                data = await response.json()
 
         # Comprobar si el usuario especificó un tipo de dólar
         if context.args:
@@ -61,16 +65,15 @@ async def get_dolar(update: Update, context: ContextTypes.DEFAULT_TYPE):
             tipo = "oficial"  # Predeterminado
 
         # Buscar el dólar solicitado en la lista de datos
-        dolar = next((item for item in data if item['casa'] == tipo), None)
+        dolar = next((item for item in data if item['casa'].lower() == tipo), None)
 
         if dolar:
             # Formatear la respuesta
-            nombre = dolar['nombre']
             compra = dolar['compra']
             venta = dolar['venta']
             fecha = dolar['fechaActualizacion']
             await update.message.reply_text(
-                f"💵 *Dólar {nombre}*\n"
+                f"💵 *Dólar {dolar['casa']}*\n"
                 f"🟢 Compra: {compra} ARS\n"
                 f"🔴 Venta: {venta} ARS\n"
                 f"📅 Última actualización: {fecha}",
@@ -84,7 +87,6 @@ async def get_dolar(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     except Exception as e:
         await update.message.reply_text(f"Ocurrió un error: {e}")
-
 
 
 # Main
