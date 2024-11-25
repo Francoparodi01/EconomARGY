@@ -82,6 +82,12 @@ def save_dolar_to_db(dolar_data):
             # Si no existe, insertar nuevo documento
             collection.insert_one(dolar)
 
+# Ruta de bienvenida
+@APP.get("/")
+def welcome():
+    return {"message": "¡Bienvenido al servidor de cotizaciones!"}
+
+
 # Ruta para obtener la cotización más reciente del dólar
 @APP.get("/dolares")
 def cotizacion_dolar():
