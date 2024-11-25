@@ -87,7 +87,7 @@ def cotizacion_dolar():
     return data
 
 # Ruta para obtener solo los valores de dólar que han cambiado
-@APP.get("dolares/actualizados")
+@APP.get("/dolares/actualizados")
 def read_dolar():
     global last_dolar_values
 
