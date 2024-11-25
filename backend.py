@@ -152,4 +152,4 @@ def read_dolar():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(APP, host="127.0.0.1", port=8000)
+    uvicorn.run(APP, host=f"{url_backend}", port=8000)
