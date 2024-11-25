@@ -35,7 +35,7 @@ last_dolar_values = {}
 telegram_token = os.getenv("Telegram_Token")
 chat_id = os.getenv("chat_id")
 url_ambito = os.getenv("url_ambito")
-
+url_backend = os.getenv("Backend_URL")
 
 # Crear el bot de Telegram
 bot = Bot(token=telegram_token)
@@ -55,6 +55,7 @@ def get_dolar_values():
     except requests.exceptions.RequestException as e:
         print(f"Error al obtener datos: {e}")
         return None
+
 # Función para enviar un mensaje al bot de Telegram
 def send_telegram_message(message: str):
     try:
@@ -62,24 +63,33 @@ def send_telegram_message(message: str):
     except Exception as e:
         print(f"Error al enviar mensaje a Telegram: {e}")
 
-# Función para guardar los valores del dólar en la base de datos
-def save_dolar_to_db(data: list):
-    try:
-        collection.insert_many(data)
-    except Exception as e:
-        print(f"Error al guardar en la base de datos: {e}")
+# Función para guardar los valores en MongoDB
+def save_dolar_to_db(dolar_data):
+    for dolar in dolar_data:
+        # Verificar si ya existe el valor para esta casa
+        existing_data = collection.find_one({"casa": dolar['casa']})
+        if existing_data:
+            # Si existe, actualizar los valores
+            collection.update_one(
+                {"casa": dolar['casa']},
+                {"$set": {
+                    "compra": dolar['compra'],
+                    "venta": dolar['venta'],
+                    "fecha": dolar['fecha']
+                }}
+            )
+        else:
+            # Si no existe, insertar nuevo documento
+            collection.insert_one(dolar)
 
-
-
-
- # Head para monitorización del servidor
-@APP.head("/")
-def head_root():
+# Ruta de bienvenida
+@APP.get("/")
+def welcome():
     return {"message": "¡Bienvenido al servidor de cotizaciones!"}
 
 
 # Ruta para obtener la cotización más reciente del dólar
-@APP.get("dolares")
+@APP.get("/dolares")
 def cotizacion_dolar():
     data = get_dolar_values()
     if not data:
@@ -142,8 +152,4 @@ def read_dolar():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(APP, host="127.0.0.1", port=8000)
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(APP, host="127.0.0.1", port=8000)
+    uvicorn.run(APP, host=f"{url_backend}", port=8000)
