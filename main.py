@@ -9,7 +9,8 @@ from telegram.ext import (
 )
 from dotenv import load_dotenv
 import os
-import aiohttp  # Usar aiohttp para todas las solicitudes asíncronas
+import aiohttp 
+import requests
 
 # Variables de .env
 load_dotenv()
@@ -90,17 +91,16 @@ async def get_dolar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"⚠️ Ocurrió un error inesperado: {str(e)}")
 
-# Función para verificar cambios y enviar notificaciones
+        # Función para actualizar los datos del dólar cuando haya modificaciones
 async def check_dolar_changes(context: CallbackContext):
     global last_dolar_values
 
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{backend_url}/dolares") as response:
-                response.raise_for_status()
-                current_dolar_values = await response.json()
-
-    except aiohttp.ClientError as e:
+        print("Obteniendo los valores actuales del dólar...")
+        response = requests.get(f"{backend_url}/dolares")
+        response.raise_for_status()
+        current_dolar_values = response.json()
+    except requests.exceptions.RequestException as e:
         print(f"⚠️ Error al obtener datos: {e}")
         return
 
@@ -126,6 +126,7 @@ async def check_dolar_changes(context: CallbackContext):
                     f"🔴 Venta: {venta} ARS (Antes: {last_venta})\n\n"
                 )
         else:
+            # Si no hay valores anteriores, asumir que hay cambios
             changes_detected = True
             message += (
                 f"🏠 Casa: {casa}\n"
@@ -138,14 +139,20 @@ async def check_dolar_changes(context: CallbackContext):
 
     # Enviar notificación si hay cambios
     if changes_detected:
+        print("¡Detectados cambios en los valores del dólar!")
         await context.bot.send_message(chat_id=chat_id, text=message, parse_mode="Markdown")
     else:
         print("✅ Sin cambios en los valores del dólar.")
 
 # Comando para iniciar el monitoreo
 async def start_check_dolar(update: Update, context: CallbackContext):
-    context.job_queue.run_repeating(check_dolar_changes, interval=60, first=5)
-    await update.message.reply_text("⏳ Monitoreo del dólar iniciado. Te notificaré cuando haya cambios en los valores.")
+    try:
+        print("Iniciando monitoreo del dólar...")
+        context.job_queue.run_repeating(check_dolar_changes, interval=60, first=5)
+        await update.message.reply_text("⏳ Monitoreo del dólar iniciado. Te notificaré cuando haya cambios en los valores.")
+    except Exception as e:
+        print(f"Error al iniciar el monitoreo del dólar: {e}")
+        await update.message.reply_text("⚠️ Ocurrió un error al intentar iniciar el monitoreo del dólar.")
 
 def main():
     print("Iniciando el bot de Telegram...")
