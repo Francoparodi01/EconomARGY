@@ -6,3 +6,4 @@ pymongo
 aiohttp
 uvicorn
 schedule
+python-telegram-bot[job-queue]

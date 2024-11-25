@@ -6,6 +6,7 @@ from telegram.ext import (
     ContextTypes,
     MessageHandler,
     filters,
+    JobQueue,
 )
 from dotenv import load_dotenv
 import os
@@ -88,16 +89,17 @@ async def get_dolar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"⚠️ Ocurrió un error inesperado: {str(e)}")
 
-        # Función para actualizar los datos del dólar cuando haya modificaciones
+# Función para actualizar los datos del dólar cuando haya modificaciones
 async def check_dolar_changes(context: CallbackContext):
     global last_dolar_values
 
     try:
         print("Obteniendo los valores actuales del dólar...")
-        response = requests.get(f"{backend_url}/dolares")
-        response.raise_for_status()
-        current_dolar_values = response.json()
-    except requests.exceptions.RequestException as e:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{backend_url}/dolares") as response:
+                response.raise_for_status()
+                current_dolar_values = await response.json()
+    except aiohttp.ClientError as e:
         print(f"⚠️ Error al obtener datos: {e}")
         return
 
