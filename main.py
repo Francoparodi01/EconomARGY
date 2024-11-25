@@ -105,17 +105,22 @@ async def check_dolar_changes(context: CallbackContext):
     changes_detected = False
     message = "💵 *Actualización de los valores del dólar:*\n\n"
 
-    # Comparar valores actuales con los últimos valores guardados
+    # Crear un diccionario temporal para almacenar los datos actuales
+    new_dolar_values = {}
+
     for dolar in current_dolar_values:
         casa = dolar["casa"]
         compra = float(dolar["compra"])
         venta = float(dolar["venta"])
 
+        # Almacenar los datos actuales
+        new_dolar_values[casa] = {"compra": compra, "venta": venta}
+
         if casa in last_dolar_values:
             last_compra = last_dolar_values[casa]["compra"]
             last_venta = last_dolar_values[casa]["venta"]
 
-            # Detectar si hay cambios reales
+            # Detectar cambios comparando con los últimos valores almacenados
             if last_compra != compra or last_venta != venta:
                 changes_detected = True
                 message += (
@@ -132,16 +137,15 @@ async def check_dolar_changes(context: CallbackContext):
                 f"🔴 Venta: {venta} ARS\n\n"
             )
 
-        # Actualizar temporalmente los valores guardados
-        last_dolar_values[casa] = {"compra": compra, "venta": venta}
+    # Actualizar `last_dolar_values` con los nuevos datos
+    last_dolar_values = new_dolar_values
 
-    # Enviar notificación si hay cambios
+    # Enviar notificación si se detectaron cambios
     if changes_detected:
         print("¡Detectados cambios en los valores del dólar!")
         await context.bot.send_message(chat_id=chat_id_user, text=message, parse_mode="Markdown")
     else:
         print("✅ Sin cambios en los valores del dólar.")
-
 
 # Comando para iniciar el monitoreo
 async def start_check_dolar(update: Update, context: CallbackContext):
