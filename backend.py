@@ -79,7 +79,7 @@ def head_root():
 
 
 # Ruta para obtener la cotización más reciente del dólar
-@APP.get("/dolares")
+@APP.get("dolares")
 def cotizacion_dolar():
     data = get_dolar_values()
     if not data:
@@ -87,7 +87,7 @@ def cotizacion_dolar():
     return data
 
 # Ruta para obtener solo los valores de dólar que han cambiado
-@APP.get("/dolares/actualizados")
+@APP.get("dolares/actualizados")
 def read_dolar():
     global last_dolar_values
 
