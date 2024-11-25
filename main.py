@@ -9,8 +9,7 @@ from telegram.ext import (
 )
 from dotenv import load_dotenv
 import os
-import requests
-import aiohttp
+import aiohttp  # Usar aiohttp para todas las solicitudes asíncronas
 
 # Variables de .env
 load_dotenv()
@@ -55,7 +54,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(response)
 
-# Función para obtener los valores del dólar desde la API
+# Función para obtener los valores del dólar desde la API (usando aiohttp)
 async def get_dolar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         async with aiohttp.ClientSession() as session:
@@ -64,10 +63,7 @@ async def get_dolar(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 data = await response.json()
 
         # Comprobar si el usuario especificó un tipo de dólar
-        if context.args:
-            tipo = context.args[0].lower()
-        else:
-            tipo = "oficial"
+        tipo = context.args[0].lower() if context.args else "oficial"
 
         # Buscar el dólar solicitado en la lista de datos
         dolar = next((item for item in data if item["casa"].lower() == tipo), None)
@@ -85,24 +81,26 @@ async def get_dolar(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown",
             )
         else:
-            # Mensaje de error si no se encuentra el tipo de dólar
             await update.message.reply_text(
                 "No se encontró información sobre el dólar solicitado. "
                 "Por favor, verifica el tipo (e.g., oficial, blue, cripto, etc.)."
             )
+    except aiohttp.ClientError as e:
+        await update.message.reply_text(f"⚠️ Error al consultar los datos: {str(e)}")
     except Exception as e:
-        await update.message.reply_text(f"⚠️ Ocurrió un error al consultar los datos: {e}")
+        await update.message.reply_text(f"⚠️ Ocurrió un error inesperado: {str(e)}")
 
 # Función para verificar cambios y enviar notificaciones
 async def check_dolar_changes(context: CallbackContext):
     global last_dolar_values
 
-    # Obtener los valores actuales
     try:
-        response = requests.get(f"{backend_url}/dolares")
-        response.raise_for_status()
-        current_dolar_values = response.json()
-    except requests.exceptions.RequestException as e:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{backend_url}/dolares") as response:
+                response.raise_for_status()
+                current_dolar_values = await response.json()
+
+    except aiohttp.ClientError as e:
         print(f"⚠️ Error al obtener datos: {e}")
         return
 
@@ -128,7 +126,6 @@ async def check_dolar_changes(context: CallbackContext):
                     f"🔴 Venta: {venta} ARS (Antes: {last_venta})\n\n"
                 )
         else:
-            # Si no hay valores anteriores, asumir que hay cambios
             changes_detected = True
             message += (
                 f"🏠 Casa: {casa}\n"
