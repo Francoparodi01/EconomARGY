@@ -53,7 +53,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(response)
 
-# Función para obtener los valores del dólar desde la API (usando aiohttp)
+# Función para obtener los valores del dólar desde la API 
 async def get_dolar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         async with aiohttp.ClientSession() as session:
@@ -95,11 +95,10 @@ async def check_dolar_changes(context: CallbackContext):
 
     try:
         print("Obteniendo los valores actuales del dólar...")
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{backend_url}/dolares") as response:
-                response.raise_for_status()
-                current_dolar_values = await response.json()
-    except aiohttp.ClientError as e:
+        response = requests.get(f"{backend_url}/dolares")
+        response.raise_for_status()
+        current_dolar_values = response.json()
+    except requests.exceptions.RequestException as e:
         print(f"⚠️ Error al obtener datos: {e}")
         return
 
@@ -116,7 +115,7 @@ async def check_dolar_changes(context: CallbackContext):
             last_compra = last_dolar_values[casa]["compra"]
             last_venta = last_dolar_values[casa]["venta"]
 
-            # Detectar si hay cambios
+            # Detectar si hay cambios reales
             if last_compra != compra or last_venta != venta:
                 changes_detected = True
                 message += (
@@ -133,7 +132,7 @@ async def check_dolar_changes(context: CallbackContext):
                 f"🔴 Venta: {venta} ARS\n\n"
             )
 
-        # Actualizar los valores guardados
+        # Actualizar temporalmente los valores guardados
         last_dolar_values[casa] = {"compra": compra, "venta": venta}
 
     # Enviar notificación si hay cambios
@@ -143,11 +142,12 @@ async def check_dolar_changes(context: CallbackContext):
     else:
         print("✅ Sin cambios en los valores del dólar.")
 
+
 # Comando para iniciar el monitoreo
 async def start_check_dolar(update: Update, context: CallbackContext):
     try:
         print("Iniciando monitoreo del dólar...")
-        context.job_queue.run_repeating(check_dolar_changes, interval=60, first=5)
+        context.JobQueue.run_repeating(check_dolar_changes, interval=60, first=5)
         await update.message.reply_text("⏳ Monitoreo del dólar iniciado. Te notificaré cuando haya cambios en los valores.")
     except Exception as e:
         print(f"Error al iniciar el monitoreo del dólar: {e}")
