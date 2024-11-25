@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 import os
 import aiohttp 
 import requests
+from pymongo import MongoClient
 
 # Variables de .env
 load_dotenv()
@@ -53,106 +54,116 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(response)
 
+# Funciones para el manejo de la base de datos 
+
+# conexión con la BD
+MONGO_URI = os.getenv("MONGO_URI")
+client = MongoClient(MONGO_URI)
+db = client["cotizaciones"]  
+collection = db["dolar"]  
+
+
 # Función para obtener los valores del dólar desde la API 
-async def get_dolar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{backend_url}/dolares") as response:
-                response.raise_for_status()
-                data = await response.json()
+def get_dolar_values():
+    # Simulación de consulta a una API o backend (reemplaza con tu lógica)
+    response = requests.get(f"{backend_url}/dolares")
+    response.raise_for_status()
+    return response.json()
 
-        # Comprobar si el usuario especificó un tipo de dólar
-        tipo = context.args[0].lower() if context.args else "oficial"
+# Función para guardar los valores en MongoDB
+def save_dolar_to_db(changes):
+    for change in changes:
+        collection.update_one(
+            {"_id": change["casa"]},  # Buscar por el identificador único
+            {"$set": {  # Actualizar valores y timestamp
+                "compra": change["compra"],
+                "venta": change["venta"],
+                "ultimaActualizacion": change["fecha"]
+            }},
+            upsert=True  # Crear un documento si no existe
+        )
 
-        # Buscar el dólar solicitado en la lista de datos
-        dolar = next((item for item in data if item["casa"].lower() == tipo), None)
-
-        if dolar:
-            # Formatear la respuesta
-            compra = dolar["compra"]
-            venta = dolar["venta"]
-            fecha = dolar["fechaActualizacion"]
-            await update.message.reply_text(
-                f"💵 *Dólar {dolar['casa']}*\n"
-                f"🟢 Compra: {compra} ARS\n"
-                f"🔴 Venta: {venta} ARS\n"
-                f"📅 Última actualización: {fecha}",
-                parse_mode="Markdown",
-            )
-        else:
-            await update.message.reply_text(
-                "No se encontró información sobre el dólar solicitado. "
-                "Por favor, verifica el tipo (e.g., oficial, blue, cripto, etc.)."
-            )
-    except aiohttp.ClientError as e:
-        await update.message.reply_text(f"⚠️ Error al consultar los datos: {str(e)}")
-    except Exception as e:
-        await update.message.reply_text(f"⚠️ Ocurrió un error inesperado: {str(e)}")
-
-# Función para actualizar los datos del dólar cuando haya modificaciones
-async def check_dolar_changes(context: CallbackContext):
-    global last_dolar_values
-
-    try:
-        print("Obteniendo los valores actuales del dólar...")
-        response = requests.get(f"{backend_url}/dolares")
-        response.raise_for_status()
-        current_dolar_values = response.json()
-    except requests.exceptions.RequestException as e:
-        print(f"⚠️ Error al obtener datos: {e}")
-        return
-
-    changes_detected = False
-    message = "💵 *Actualización de los valores del dólar:*\n\n"
-
-    # Crear un diccionario temporal para almacenar los datos actuales
-    new_dolar_values = {}
-
-    for dolar in current_dolar_values:
+def detect_changes(new_data):
+    changes = []
+    for dolar in new_data:
         casa = dolar["casa"]
         compra = float(dolar["compra"])
         venta = float(dolar["venta"])
 
-        # Almacenar los datos actuales
-        new_dolar_values[casa] = {"compra": compra, "venta": venta}
+        # Consultar el último valor en la base de datos
+        last_dolar = collection.find_one({"_id": casa})
 
-        if casa in last_dolar_values:
-            last_compra = last_dolar_values[casa]["compra"]
-            last_venta = last_dolar_values[casa]["venta"]
-
-            # Detectar cambios comparando con los últimos valores almacenados
-            if last_compra != compra or last_venta != venta:
-                changes_detected = True
-                message += (
-                    f"🏠 Casa: {casa}\n"
-                    f"🟢 Compra: {compra} ARS (Antes: {last_compra})\n"
-                    f"🔴 Venta: {venta} ARS (Antes: {last_venta})\n\n"
-                )
+        if last_dolar:
+            # Comprobar si hay cambios
+            if last_dolar["compra"] != compra or last_dolar["venta"] != venta:
+                changes.append({
+                    "casa": casa,
+                    "compra": compra,
+                    "venta": venta,
+                    "fecha": dolar["fechaActualizacion"]
+                })
         else:
-            # Si no hay valores anteriores, asumir que hay cambios
-            changes_detected = True
-            message += (
-                f"🏠 Casa: {casa}\n"
-                f"🟢 Compra: {compra} ARS\n"
-                f"🔴 Venta: {venta} ARS\n\n"
+            # Si no existe en la BD, lo consideramos como un cambio
+            changes.append({
+                "casa": casa,
+                "compra": compra,
+                "venta": venta,
+                "fecha": dolar["fechaActualizacion"]
+            })
+    return changes
+
+async def get_dolar_values():
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{backend_url}/dolares") as response:
+            response.raise_for_status()
+            return await response.json()
+
+
+# Función para obtener los valores del dólar desde la API 
+async def get_dolar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        data = await get_dolar_values()
+        tipo = context.args[0].lower() if context.args else "oficial"
+        dolar = next((item for item in data if item["casa"].lower() == tipo), None)
+        if dolar:
+            await update.message.reply_text(
+                f"💵 *Dólar {dolar['casa']}*\n"
+                f"🟢 Compra: {dolar['compra']} ARS\n"
+                f"🔴 Venta: {dolar['venta']} ARS\n"
+                f"📅 Última actualización: {dolar['fechaActualizacion']}",
+                parse_mode="Markdown",
             )
+        else:
+            await update.message.reply_text(
+                "No se encontró información sobre el dólar solicitado. Verifica el tipo (e.g., oficial, blue, etc.)."
+            )
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Error al consultar los datos: {str(e)}")
 
-    # Actualizar `last_dolar_values` con los nuevos datos
-    last_dolar_values = new_dolar_values
-
-    # Enviar notificación si se detectaron cambios
-    if changes_detected:
-        print("¡Detectados cambios en los valores del dólar!")
-        await context.bot.send_message(chat_id=chat_id_user, text=message, parse_mode="Markdown")
-    else:
-        print("✅ Sin cambios en los valores del dólar.")
-
+# Función para actualizar los datos del dólar cuando haya modificaciones
+async def check_dolar_changes(context: CallbackContext):
+    try:
+        current_dolar_values = await get_dolar_values()
+        changes = detect_changes(current_dolar_values)
+        if changes:
+            message = "💵 *Actualización de los valores del dólar:*\n\n"
+            for change in changes:
+                message += (
+                    f"🏠 Casa: {change['casa']}\n"
+                    f"🟢 Compra: {change['compra']} ARS\n"
+                    f"🔴 Venta: {change['venta']} ARS\n"
+                    f"📅 Fecha: {change['fecha']}\n\n"
+                )
+            save_dolar_to_db(changes)
+            await context.bot.send_message(chat_id=chat_id_user, text=message, parse_mode="Markdown")
+    except Exception as e:
+        print(f"⚠️ Error en la detección de cambios: {e}")
+        
 # Comando para iniciar el monitoreo
 async def start_check_dolar(update: Update, context: CallbackContext):
-    try:
-        print("Iniciando monitoreo del dólar...")
-        context.JobQueue.run_repeating(check_dolar_changes, interval=60, first=5)
-        await update.message.reply_text("⏳ Monitoreo del dólar iniciado. Te notificaré cuando haya cambios en los valores.")
+    try: 
+        context.job_queue.run_repeating(check_dolar_changes, interval=60, first=5)
+        await update.message.reply_text("⏳ Monitoreo del dólar iniciado. Te notificaré si hay cambios.")
     except Exception as e:
         print(f"Error al iniciar el monitoreo del dólar: {e}")
         await update.message.reply_text("⚠️ Ocurrió un error al intentar iniciar el monitoreo del dólar.")
