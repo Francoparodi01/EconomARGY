@@ -22,16 +22,13 @@ last_dolar_values = {}
 token = os.getenv("Telegram_Token")
 userName = os.getenv("Telegram_Username")
 backend_url = os.getenv("Backend_URL")
-chat_id = os.getenv("chat_id")
+chat_id_user = os.getenv("chat_id_user")
 
 # Funciones del Bot
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"¡Hola! Soy {userName}, tu bot económico. Usa /help para ver mis comandos disponibles."
     )
-
-async def error(update: Update, context: CallbackContext):
-    await update.message.reply_text("Ocurrió un error inesperado. Intenta de nuevo más tarde.")
 
 async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -140,7 +137,7 @@ async def check_dolar_changes(context: CallbackContext):
     # Enviar notificación si hay cambios
     if changes_detected:
         print("¡Detectados cambios en los valores del dólar!")
-        await context.bot.send_message(chat_id=chat_id, text=message, parse_mode="Markdown")
+        await context.bot.send_message(chat_id=chat_id_user, text=message, parse_mode="Markdown")
     else:
         print("✅ Sin cambios en los valores del dólar.")
 
@@ -168,9 +165,6 @@ def main():
 
     # Manejar mensajes de texto
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    # Manejar errores
-    app.add_error_handler(error)
 
     # Iniciar el bot
     app.run_polling()
