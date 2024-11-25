@@ -5,7 +5,7 @@ import os
 import requests
 import aiohttp
 import schedule
-
+import time
 
 # Variables de .env
 load_dotenv()
@@ -110,7 +110,7 @@ async def check_dolar_changes(context: ContextTypes.DEFAULT_TYPE):
     if changes_detected:
         await context.bot.send_message(chat_id=context.job.chat_id, text=message, parse_mode="Markdown")
     else:
-        await context.bot.send_message("✅ Sin cambios en los valores del dólar.")
+        await context.bot.send_message(chat_id=context.job.chat_id, text="✅ Sin cambios en los valores del dólar.")
 
 # Programar la verificación de cambios cada 1 minuto
 def schedule_dolar():
@@ -188,3 +188,6 @@ def main():
 # Main
 if __name__ == '__main__':
     main()
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
