@@ -17,9 +17,6 @@ from pymongo import MongoClient
 # Variables de .env
 load_dotenv()
 
-# Variables globales
-last_dolar_values = {}
-
 # Token y configuración del bot
 token = os.getenv("Telegram_Token")
 userName = os.getenv("Telegram_Username")
@@ -63,12 +60,13 @@ db = client["cotizaciones"]
 collection = db["dolar"]  
 
 
-# Función para obtener los valores del dólar desde la API 
-def get_dolar_values():
-    # Simulación de consulta a una API o backend (reemplaza con tu lógica)
-    response = requests.get(f"{backend_url}/dolares")
-    response.raise_for_status()
-    return response.json()
+async def get_dolar_values():
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{backend_url}/dolares") as response:
+            response.raise_for_status()
+            return await response.json()
+
+
 
 # Función para guardar los valores en MongoDB
 def save_dolar_to_db(changes):
@@ -82,42 +80,6 @@ def save_dolar_to_db(changes):
             }},
             upsert=True  # Crear un documento si no existe
         )
-
-def detect_changes(new_data):
-    changes = []
-    for dolar in new_data:
-        casa = dolar["casa"]
-        compra = float(dolar["compra"])
-        venta = float(dolar["venta"])
-
-        # Consultar el último valor en la base de datos
-        last_dolar = collection.find_one({"_id": casa})
-
-        if last_dolar:
-            # Comprobar si hay cambios
-            if last_dolar["compra"] != compra or last_dolar["venta"] != venta:
-                changes.append({
-                    "casa": casa,
-                    "compra": compra,
-                    "venta": venta,
-                    "fecha": dolar["fechaActualizacion"]
-                })
-        else:
-            # Si no existe en la BD, lo consideramos como un cambio
-            changes.append({
-                "casa": casa,
-                "compra": compra,
-                "venta": venta,
-                "fecha": dolar["fechaActualizacion"]
-            })
-    return changes
-
-async def get_dolar_values():
-    async with aiohttp.ClientSession() as session:
-        async with session.get(f"{backend_url}/dolares") as response:
-            response.raise_for_status()
-            return await response.json()
-
 
 # Función para obtener los valores del dólar desde la API 
 async def get_dolar(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -139,8 +101,54 @@ async def get_dolar(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     except Exception as e:
         await update.message.reply_text(f"⚠️ Error al consultar los datos: {str(e)}")
+def detect_changes(new_data):
+    changes = []
+    for dolar in new_data:
+        casa = dolar["casa"]
+        compra = float(dolar["compra"])
+        venta = float(dolar["venta"])
 
-# Función para actualizar los datos del dólar cuando haya modificaciones
+        # Consultar el último valor en la base de datos
+        last_dolar = collection.find_one({"_id": casa})
+
+        if last_dolar:
+            # Comprobar si hay cambios
+            if (
+                last_dolar["compra"] != compra
+                or last_dolar["venta"] != venta
+                or not last_dolar.get("notificado", False)
+            ):
+                changes.append({
+                    "casa": casa,
+                    "compra": compra,
+                    "venta": venta,
+                    "fecha": dolar["fechaActualizacion"],
+                })
+        else:
+            # Si no existe en la BD, lo consideramos como un cambio
+            changes.append({
+                "casa": casa,
+                "compra": compra,
+                "venta": venta,
+                "fecha": dolar["fechaActualizacion"],
+            })
+    return changes
+
+
+def save_dolar_to_db(changes):
+    for change in changes:
+        collection.update_one(
+            {"_id": change["casa"]},  # Buscar por el identificador único
+            {"$set": {  # Actualizar valores y timestamp
+                "compra": change["compra"],
+                "venta": change["venta"],
+                "ultimaActualizacion": change["fecha"],
+                "notificado": True  # Marcar como notificado
+            }},
+            upsert=True  # Crear un documento si no existe
+        )
+
+
 async def check_dolar_changes(context: CallbackContext):
     try:
         current_dolar_values = await get_dolar_values()
@@ -156,8 +164,11 @@ async def check_dolar_changes(context: CallbackContext):
                 )
             save_dolar_to_db(changes)
             await context.bot.send_message(chat_id=chat_id_user, text=message, parse_mode="Markdown")
+        else:
+            print("No hay cambios detectados.")
     except Exception as e:
         print(f"⚠️ Error en la detección de cambios: {e}")
+
         
 # Comando para iniciar el monitoreo
 async def start_check_dolar(update: Update, context: CallbackContext):
