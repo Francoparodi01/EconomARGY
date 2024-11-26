@@ -231,7 +231,7 @@ def main():
     
     import uvicorn
     # Iniciar la aplicación FastAPI en un hilo separado para que el bot de Telegram también funcione
-    threading.Thread(target=lambda: uvicorn.run(APP, host="127.0.0.1", port=8000)).start()
+    threading.Thread(target=lambda: uvicorn.run(APP, host="0.0.0.0", port=8000)).start()
 
     # Ejecutar el bot
     app.run_polling()
