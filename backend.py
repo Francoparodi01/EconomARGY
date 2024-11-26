@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from telegram import Bot
 from pymongo import MongoClient
 from bson import ObjectId
+from datetime import datetime
 
 
 # Cargar las variables de entorno
@@ -36,6 +37,8 @@ telegram_token = os.getenv("Telegram_Token")
 chat_id = os.getenv("chat_id")
 url_ambito = os.getenv("url_ambito")
 url_backend = os.getenv("Backend_URL")
+chat_id_user = os.getenv("chat_id_user")
+url_inflacion = os.getenv("url_inflacion")
 
 # Crear el bot de Telegram
 bot = Bot(token=telegram_token)
@@ -50,37 +53,17 @@ collection = db["dolar"]
 def get_dolar_values():
     try:
         response = requests.get(url_ambito)
-        response.raise_for_status()  
-        return response.json()  
+        response.raise_for_status()  # Verifica errores HTTP
+        data = response.json()  # Intenta cargar el JSON
+        if isinstance(data, list) and all("casa" in item for item in data):
+            return data
+        else:
+            print("⚠️ La respuesta de la API no tiene el formato esperado.")
+            return None
     except requests.exceptions.RequestException as e:
         print(f"Error al obtener datos: {e}")
         return None
 
-# Función para enviar un mensaje al bot de Telegram
-def send_telegram_message(message: str):
-    try:
-        bot.send_message(chat_id=chat_id, text=message)
-    except Exception as e:
-        print(f"Error al enviar mensaje a Telegram: {e}")
-
-# Función para guardar los valores en MongoDB
-def save_dolar_to_db(dolar_data):
-    for dolar in dolar_data:
-        # Verificar si ya existe el valor para esta casa
-        existing_data = collection.find_one({"casa": dolar['casa']})
-        if existing_data:
-            # Si existe, actualizar los valores
-            collection.update_one(
-                {"casa": dolar['casa']},
-                {"$set": {
-                    "compra": dolar['compra'],
-                    "venta": dolar['venta'],
-                    "fecha": dolar['fecha']
-                }}
-            )
-        else:
-            # Si no existe, insertar nuevo documento
-            collection.insert_one(dolar)
 
 # Ruta de bienvenida
 @APP.get("/")
@@ -94,62 +77,33 @@ def cotizacion_dolar():
     data = get_dolar_values()
     if not data:
         return {"error": "No se pudo obtener el valor del dólar."}
-    return data
+    return {"data": data}
 
-# Ruta para obtener solo los valores de dólar que han cambiado
-@APP.get("/dolares/actualizados")
-def read_dolar():
-    global last_dolar_values
+def get_inflacion_data():
+    try:
+        response = requests.get(url_inflacion)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Error al obtener datos: {e}")
+        return None
 
-    data = get_dolar_values()
-    if not data:
-        return {"error": "No se pudieron obtener los valores"}
 
-    changes = []
-    for dolar in data:
-        casa = dolar["casa"]
-        compra = dolar["compra"]
-        venta = dolar["venta"]
-        
-        if casa in last_dolar_values:
-            if (last_dolar_values[casa]["compra"] != compra or last_dolar_values[casa]["venta"] != venta):
-                changes.append({
-                    "casa": casa,
-                    "compra": compra,
-                    "venta": venta,
-                    "fecha": dolar["fechaActualizacion"]
-                })
-        else:
-            changes.append({
-                "casa": casa,
-                "compra": compra,
-                "venta": venta,
-                "fecha": dolar["fechaActualizacion"]
-            })
 
-        # Actualizar el último valor para la próxima comparación
-        last_dolar_values[casa] = {"compra": compra, "venta": venta}
+@APP.get("/inflacion")
+def obtener_inflacion():
+    fecha_inicio = '2023-12-10'
+    fecha_hoy_str = datetime.now().strftime('%Y-%m-%d')
+    dataInflacion_url = f'{url_inflacion}/{fecha_inicio}/{fecha_hoy_str}'
 
-    if changes:
-        # Enviar mensaje de notificación al bot
-        message = "💵 *Actualización de los valores del dólar:*\n\n"
-        for change in changes:
-            message += f"🏠 Casa: {change['casa']}\n"
-            message += f"🟢 Compra: {change['compra']} ARS\n"
-            message += f"🔴 Venta: {change['venta']} ARS\n"
-            message += f"📅 Fecha de actualización: {change['fecha']}\n\n"
-        
-        # Guardar los cambios en la base de datos
-        save_dolar_to_db(changes)
+    data = get_inflacion_data()
+    if data and 'results' in data:
+        return [{"fecha": item['fecha'], "valor": item['valor']} for item in data['results']]
+    
+    return {"error": "No se pudo obtener los datos de inflación."}
 
-        # Enviar el mensaje al bot de Telegram
-        send_telegram_message(message)
 
-        # Asegúrate de serializar los cambios antes de devolverlos
-        return serialize_objectid(changes)
-    else:
-        return {"message": "No hay cambios en los valores del dólar"}
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(APP, host=f"{url_backend}", port=8000)
+    uvicorn.run(APP, host="127.0.0.1", port=8000)

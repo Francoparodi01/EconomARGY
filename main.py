@@ -13,6 +13,7 @@ import os
 import aiohttp 
 import requests
 from pymongo import MongoClient
+from datetime import datetime
 
 # Variables de .env
 load_dotenv()
@@ -64,21 +65,22 @@ async def get_dolar_values():
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{backend_url}/dolares") as response:
             response.raise_for_status()
-            return await response.json()
-
+            data = await response.json()
+            return data["data"]  # Acceder a la lista "data" que contiene los valores
 
 
 # Función para guardar los valores en MongoDB
-def save_dolar_to_db(changes):
-    for change in changes:
+def save_dolar_to_db(new_data):
+    """Guardar nuevos datos en la base de datos."""
+    for dolar in new_data:
         collection.update_one(
-            {"_id": change["casa"]},  # Buscar por el identificador único
-            {"$set": {  # Actualizar valores y timestamp
-                "compra": change["compra"],
-                "venta": change["venta"],
-                "ultimaActualizacion": change["fecha"]
+            {"_id": dolar["casa"]},  # Buscar por identificador único (nombre de la casa)
+            {"$set": {
+                "compra": dolar["compra"],
+                "venta": dolar["venta"],
+                "ultimaActualizacion": dolar["fechaActualizacion"]
             }},
-            upsert=True  # Crear un documento si no existe
+            upsert=True  # Crear un nuevo documento si no existe
         )
 
 # Función para obtener los valores del dólar desde la API 
@@ -89,7 +91,7 @@ async def get_dolar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         dolar = next((item for item in data if item["casa"].lower() == tipo), None)
         if dolar:
             await update.message.reply_text(
-                f"💵 *Dólar {dolar['casa']}*\n"
+                f"💵 *Dólar {dolar['nombre']} ({dolar['casa']})*\n"
                 f"🟢 Compra: {dolar['compra']} ARS\n"
                 f"🔴 Venta: {dolar['venta']} ARS\n"
                 f"📅 Última actualización: {dolar['fechaActualizacion']}",
@@ -101,6 +103,9 @@ async def get_dolar(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     except Exception as e:
         await update.message.reply_text(f"⚠️ Error al consultar los datos: {str(e)}")
+
+
+# Función para detectar cambios en los valores
 def detect_changes(new_data):
     changes = []
     for dolar in new_data:
@@ -135,40 +140,81 @@ def detect_changes(new_data):
     return changes
 
 
-def save_dolar_to_db(changes):
-    for change in changes:
+def save_dolar_to_db(new_data):
+    """Guardar nuevos datos en la base de datos."""
+    for dolar in new_data:
         collection.update_one(
-            {"_id": change["casa"]},  # Buscar por el identificador único
-            {"$set": {  # Actualizar valores y timestamp
-                "compra": change["compra"],
-                "venta": change["venta"],
-                "ultimaActualizacion": change["fecha"],
-                "notificado": True  # Marcar como notificado
+            {"_id": dolar["casa"]},  # Buscar por identificador único
+            {"$set": {
+                "compra": dolar["compra"],
+                "venta": dolar["venta"],
+                "ultimaActualizacion": dolar["fechaActualizacion"]
             }},
-            upsert=True  # Crear un documento si no existe
+            upsert=True  # Crear un nuevo documento si no existe
         )
 
 
+# Variable para guardar la última fecha procesada
+last_notified_time = None
+
 async def check_dolar_changes(context: CallbackContext):
+    global last_notified_time  # Usamos la variable global para rastrear la última fecha procesada
+
     try:
+        # Obtener valores actuales desde la API
         current_dolar_values = await get_dolar_values()
-        changes = detect_changes(current_dolar_values)
-        if changes:
+
+        # Si no hay valores previos registrados en la variable global, obtener el último registro de la BD
+        if not last_notified_time:
+            last_entry = collection.find_one(sort=[("ultimaActualizacion", -1)])  # Obtener el registro más reciente
+            if last_entry:
+                last_notified_time = datetime.strptime(last_entry["ultimaActualizacion"], "%Y-%m-%dT%H:%M:%S.%fZ")
+
+        # Procesar nuevos datos
+        new_data = []
+        for dolar in current_dolar_values:
+            # Convertir fecha de actualización
+            dolar_datetime = datetime.strptime(dolar["fechaActualizacion"], "%Y-%m-%dT%H:%M:%S.%fZ")
+
+            # Agregar a la lista de nuevos datos solo si es más reciente que la última notificación
+            if not last_notified_time or dolar_datetime > last_notified_time:
+                new_data.append(dolar)
+
+        if new_data:
+            # Generar mensaje de notificación
             message = "💵 *Actualización de los valores del dólar:*\n\n"
-            for change in changes:
+            for dolar in new_data:
                 message += (
-                    f"🏠 Casa: {change['casa']}\n"
-                    f"🟢 Compra: {change['compra']} ARS\n"
-                    f"🔴 Venta: {change['venta']} ARS\n"
-                    f"📅 Fecha: {change['fecha']}\n\n"
+                    f"🏠 Casa: {dolar['nombre']} ({dolar['casa']})\n"
+                    f"🟢 Compra: {dolar['compra']} ARS\n"
+                    f"🔴 Venta: {dolar['venta']} ARS\n"
+                    f"📅 Fecha: {dolar['fechaActualizacion']}\n\n"
                 )
-            save_dolar_to_db(changes)
+
+            # Guardar los datos nuevos en la base de datos
+            save_dolar_to_db(new_data)
+
+            # Actualizar la última fecha procesada
+            last_notified_time = max(
+                datetime.strptime(dolar["fechaActualizacion"], "%Y-%m-%dT%H:%M:%S.%fZ")
+                for dolar in new_data
+            )
+
+            # Enviar notificación al usuario
             await context.bot.send_message(chat_id=chat_id_user, text=message, parse_mode="Markdown")
         else:
-            print("No hay cambios detectados.")
+            print("No hay nuevos datos.")
     except Exception as e:
         print(f"⚠️ Error en la detección de cambios: {e}")
 
+
+# Función para obtener la última hora de actualización guardada en la base de datos
+def get_last_update_time():
+    """Obtener la última hora de actualización guardada en la base de datos."""
+    last_entry = collection.find_one(sort=[("ultimaActualizacion", -1)])  # Ordenar por el campo más reciente
+    if last_entry:
+        return datetime.strptime(last_entry["ultimaActualizacion"], "%Y-%m-%dT%H:%M:%S.%fZ")
+    return None
         
 # Comando para iniciar el monitoreo
 async def start_check_dolar(update: Update, context: CallbackContext):
