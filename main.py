@@ -26,6 +26,7 @@ chat_id_user = os.getenv("chat_id_user")
 url_inflacion = os.getenv("url_inflacion")
 MONGO_URI = os.getenv("MONGO_URI")
 url_riesgo_pais = os.getenv("url_riesgo_pais")
+PORT = os.getenv("PORT")
 
 # Crear el bot de Telegram
 bot = Bot(token=telegram_token)
@@ -232,7 +233,7 @@ def obtener_riesgo_pais():
 
 async def start_services():
     bot_task = asyncio.create_task(APP.run_polling())
-    fastapi_task = asyncio.create_task(uvicorn.run(APP, host="127.0.0.1", port=10000 ))
+    fastapi_task = asyncio.create_task(uvicorn.run(APP, host="0.0.0.0", port=PORT or 5000))
     await asyncio.gather(bot_task, fastapi_task)
 
 
