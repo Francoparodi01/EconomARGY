@@ -231,27 +231,31 @@ def obtener_riesgo_pais():
         return {"data": data}
     return {"error": "No se pudo obtener el riesgo país."}
 
-async def start_services():
-    bot_task = asyncio.create_task(APP.run_polling())
-    fastapi_task = asyncio.create_task(uvicorn.run(APP, host="0.0.0.0", port=PORT or 5000))
-    await asyncio.gather(bot_task, fastapi_task)
-
-
-# Función principal de Telegram
-def main():
+async def start_telegram_bot():
     print("Iniciando el bot de Telegram...")
 
     app = Application.builder().token(telegram_token).build()
 
-    # Comandos de Telegram 
+    # Comandos de Telegram
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help))
     app.add_handler(CommandHandler("dolar", get_dolar_from_db))
     app.add_handler(CommandHandler("check_dolar", start_periodic_check))
 
-    # Ejecutar el bot
-    app.run_polling()
+    # Ejecutar el bot de manera asíncrona
+    await app.run_polling()
+
+async def start_services():
+    # Tarea para iniciar el servidor FastAPI
+    port = int(os.getenv("PORT", 5000))  # Usar el puerto de la variable de entorno
+    server_task = asyncio.create_task(uvicorn.run(APP, host="0.0.0.0", port=port))
+
+    # Ejecutar el bot de Telegram en un hilo separado
+    loop = asyncio.get_event_loop()
+    bot_task = loop.run_in_executor(None, lambda: asyncio.run(start_telegram_bot()))
+
+    # Esperar a que ambas tareas se completen
+    await asyncio.gather(server_task, bot_task)
 
 if __name__ == "__main__":
-    main()
     asyncio.run(start_services())
