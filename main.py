@@ -1,6 +1,6 @@
 import os
 import requests
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from telegram import Bot, Update
@@ -206,6 +206,10 @@ async def start_periodic_check(update: Update, context: CallbackContext):
 @APP.get("/")
 def welcome():
     return {"message": "¡Bienvenido al servidor de cotizaciones!"}
+
+@APP.head("/")
+async def read_root_head():
+    return Response(status_code=200)
 
 @APP.get("/dolares")
 def cotizacion_dolar():
