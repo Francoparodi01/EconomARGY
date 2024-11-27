@@ -25,6 +25,7 @@ url_backend = os.getenv("Backend_URL")
 chat_id_user = os.getenv("chat_id_user")
 url_inflacion = os.getenv("url_inflacion")
 MONGO_URI = os.getenv("MONGO_URI")
+url_riesgo_pais = os.getenv("url_riesgo_pais")
 
 # Crear el bot de Telegram
 bot = Bot(token=telegram_token)
@@ -53,6 +54,16 @@ def get_dolar_values():
 def get_inflacion_data():
     try:
         response = requests.get(url_inflacion)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Error al obtener datos: {e}")
+        return None
+
+# Obtener ultimo dato riesgo pais
+def get_riesgo_pais():
+    try:
+        response = requests.get(url_riesgo_pais)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -212,6 +223,13 @@ def obtener_inflacion():
         return [{"fecha": item['fecha'], "valor": item['valor']} for item in data['results']]
     return {"error": "No se pudo obtener los datos de inflación."}
 
+@APP.get("/riesgo_pais")
+def obtener_riesgo_pais():
+    data = get_riesgo_pais()
+    if data:
+        return {"data": data}
+    return {"error": "No se pudo obtener el riesgo país."}
+
 async def start_services():
     bot_task = asyncio.create_task(APP.run_polling())
     fastapi_task = asyncio.create_task(uvicorn.run(APP, host="127.0.0.1", port=8000))
@@ -230,9 +248,6 @@ def main():
     app.add_handler(CommandHandler("dolar", get_dolar_from_db))
     app.add_handler(CommandHandler("check_dolar", start_periodic_check))
     
-    import uvicorn
-    # Iniciar la aplicación FastAPI en un hilo separado para que el bot de Telegram también funcione
-    threading.Thread(target=lambda: uvicorn.run(APP, host="0.0.0.0", port=8000)).start()
 
     # Ejecutar el bot
     app.run_polling()
