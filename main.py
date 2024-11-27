@@ -232,7 +232,7 @@ def obtener_riesgo_pais():
 
 async def start_services():
     bot_task = asyncio.create_task(APP.run_polling())
-    fastapi_task = asyncio.create_task(uvicorn.run(APP, host="127.0.0.1", port=8000))
+    fastapi_task = asyncio.create_task(uvicorn.run(APP, host="127.0.0.1", port=10000 ))
     await asyncio.gather(bot_task, fastapi_task)
 
 
@@ -247,7 +247,6 @@ def main():
     app.add_handler(CommandHandler("help", help))
     app.add_handler(CommandHandler("dolar", get_dolar_from_db))
     app.add_handler(CommandHandler("check_dolar", start_periodic_check))
-    
 
     # Ejecutar el bot
     app.run_polling()
