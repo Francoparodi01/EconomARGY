@@ -71,6 +71,7 @@ async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         " - /start: Iniciar el bot.\n"
         " - /help: Ver esta ayuda.\n"
         " - /dolar [tipo]: Consultar el precio del dólar (oficial, blue, etc.).\n"
+        " - /check_dolar: Iniciar notificaciones de cambios en el dólar."
     )
 
 # Función para almacenar los valores del dólar en la base de datos
@@ -228,10 +229,6 @@ def main():
     app.add_handler(CommandHandler("help", help))
     app.add_handler(CommandHandler("dolar", get_dolar_from_db))
     app.add_handler(CommandHandler("check_dolar", start_periodic_check))
-    
-    import uvicorn
-    # Iniciar la aplicación FastAPI en un hilo separado para que el bot de Telegram también funcione
-    threading.Thread(target=lambda: uvicorn.run(APP, host="0.0.0.0", port=8000)).start()
 
     # Ejecutar el bot
     app.run_polling()
