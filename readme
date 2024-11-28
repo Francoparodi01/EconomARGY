@@ -1,0 +1,168 @@
+# Documentación del Código
+
+## Descripción General
+
+Este bot integra diferentes funcionalidades para consultar y almacenar información relacionada con el dólar, la inflación y el riesgo país. Además, permite interactuar con usuarios a través de Telegram enviando notificaciones y respuestas automáticas. Los datos obtenidos son almacenados en una base de datos MongoDB y se actualizan periódicamente.
+
+---
+
+## Funciones Principales
+
+### 1. `get_dolar_values`
+
+**Propósito:** Obtiene los valores del dólar desde una API (definida en `url_ambito`).
+
+**Detalles:**
+
+- Realiza una solicitud HTTP GET para obtener los datos.
+- Verifica si la respuesta tiene el formato esperado (una lista con información de la casa de cambio).
+- Devuelve los datos obtenidos o `None` si hubo un error o el formato no era válido.
+
+---
+
+### 2. `get_inflacion_data`
+
+**Propósito:** Obtiene información sobre la inflación desde una API (definida en `url_inflacion`).
+
+**Detalles:**
+
+- Realiza una solicitud HTTP GET para obtener los datos.
+- Maneja posibles errores y devuelve los datos en formato JSON o `None` si hay un problema.
+
+---
+
+### 3. `get_riesgo_pais`
+
+**Propósito:** Obtiene el valor actual del riesgo país desde una API (definida en `url_riesgo_pais`).
+
+**Detalles:**
+
+- Realiza una solicitud GET, verifica la respuesta y devuelve los datos o `None` si ocurre un error.
+
+---
+
+## Funciones Relacionadas con Telegram
+
+### 4. `start`
+
+**Propósito:** Responde cuando un usuario inicia el bot de Telegram con el comando `/start`.
+
+**Detalles:**
+
+- Envía un mensaje de bienvenida indicando que el bot está listo para usarse.
+- Informa al usuario que use el comando `/help` para ver los comandos disponibles.
+
+---
+
+### 5. `help`
+
+**Propósito:** Proporciona una lista de comandos disponibles cuando el usuario ejecuta `/help`.
+
+**Detalles:**
+
+- Envía un mensaje al usuario con una breve descripción de los comandos soportados:
+  - `/start`: Inicia el bot.
+  - `/help`: Muestra ayuda.
+  - `/dolar [tipo]`: Consulta el precio del dólar según su tipo (oficial, blue, etc.).
+  - `/check_dolar`: Inicia notificaciones automáticas sobre cambios en el dólar.
+
+---
+
+### 6. `update_dolar_values`
+
+**Propósito:** Actualiza los valores del dólar en la base de datos MongoDB y notifica al usuario sobre los cambios.
+
+**Detalles:**
+
+- Recibe los datos del dólar en formato JSON y los procesa.
+- Crea un documento con un identificador único (`_id`) que combina la moneda y la casa de cambio.
+- Actualiza la base de datos usando `update_one`, permitiendo inserciones o modificaciones.
+- Si un valor fue actualizado, notifica al usuario mediante un mensaje de Telegram.
+
+---
+
+### 7. `get_dolar_from_db`
+
+**Propósito:** Recupera el valor del dólar almacenado en la base de datos y lo envía al usuario.
+
+**Detalles:**
+
+- Busca en la base de datos MongoDB el valor del dólar para el tipo solicitado (e.g., "oficial").
+- Envía un mensaje con los detalles del dólar (compra, venta, última actualización).
+- Si no encuentra información, informa al usuario que no hay datos disponibles.
+
+---
+
+### 8. `store_dolar_values`
+
+**Propósito:** Descarga los valores del dólar desde la API y los almacena en la base de datos MongoDB.
+
+**Detalles:**
+
+- Llama a `get_dolar_values` para obtener los datos.
+- Procesa cada entrada y la almacena en la base de datos.
+- Notifica al usuario sobre las actualizaciones realizadas.
+- Maneja posibles errores en el almacenamiento o la obtención de datos.
+
+---
+
+### 9. `check_and_notify_changes`
+
+**Propósito:** Verifica si hubo cambios en los valores del dólar y notifica a los usuarios si es necesario.
+
+**Detalles:**
+
+- Obtiene los valores del dólar usando `get_dolar_values`.
+- Compara los valores obtenidos con los almacenados en la base de datos.
+- Si detecta cambios, actualiza la base de datos y envía notificaciones al usuario sobre los cambios.
+
+---
+
+## Explicación General del Flujo
+
+### Integración con APIs Externas
+
+- Se obtienen datos de diferentes fuentes como la API de Ámbito (`url_ambito`), inflación (`url_inflacion`) y riesgo país (`url_riesgo_pais`).
+- Los datos se procesan y se almacenan en MongoDB.
+
+### Integración con Telegram
+
+- Los usuarios interactúan con el bot a través de comandos como `/start`, `/help` y `/dolar`.
+- Se envían respuestas y notificaciones usando la API de Telegram.
+
+### Base de Datos
+
+- Los valores del dólar se almacenan en una base de datos MongoDB para persistencia y consultas posteriores.
+- Se usa un `_id` único para evitar duplicados.
+
+### Notificaciones Automáticas
+
+- Se verifica periódicamente si hay cambios en los valores del dólar y, si los hay, se notifica a los usuarios registrados.
+
+---
+
+## Otras Características Importantes
+
+### Variables de Entorno
+
+- Las credenciales y URLs sensibles están almacenadas en un archivo `.env` para mayor seguridad.
+
+### Manejo de Errores
+
+- Todas las solicitudes HTTP y operaciones de base de datos están rodeadas de bloques `try-except` para capturar errores y evitar caídas del sistema.
+
+---
+
+## Comandos Disponibles
+
+1. `/start`: Inicia el bot y muestra un mensaje de bienvenida.
+2. `/help`: Lista los comandos disponibles y sus descripciones.
+3. `/dolar [tipo]`: Consulta el precio del dólar según el tipo especificado (e.g., oficial, blue).
+4. `/check_dolar`: Activa notificaciones automáticas sobre cambios en los valores del dólar.
+
+---
+
+Si tienes dudas o necesitas agregar nuevas funcionalidades, no dudes en consultarlo. ¡Gracias por usar este bot!
+
+hacelo para un readme de github
+

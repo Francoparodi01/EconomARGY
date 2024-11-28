@@ -27,6 +27,10 @@ url_inflacion = os.getenv("url_inflacion")
 MONGO_URI = os.getenv("MONGO_URI")
 url_riesgo_pais = os.getenv("url_riesgo_pais")
 
+# Verificar que todas las variables estén definidas
+if not all([telegram_token, chat_id, url_ambito, chat_id_user, url_inflacion, MONGO_URI, url_riesgo_pais]):
+    raise RuntimeError("Faltan variables de entorno obligatorias.")
+
 # Crear el bot de Telegram
 bot = Bot(token=telegram_token)
 
@@ -40,7 +44,7 @@ def get_dolar_values():
     try:
         response = requests.get(f"{url_ambito}")
         response.raise_for_status()  # Verifica si la respuesta es exitosa
-        data = response.json()  # Asumiendo que la respuesta está en formato JSON
+        data = response.json()  
         if isinstance(data, list) and all("casa" in item for item in data):
             return data
         else:
@@ -105,8 +109,9 @@ async def update_dolar_values(data, update: Update):
                 {"$set": document},
                 upsert=True
             )
-            # Eliminamos la parte que requiere `update.message.reply_text` aquí
+            # Si se actualizó el valor, notificarlo
             if result.modified_count > 0:
+                # Enviar mensaje al chat
                 await update.message.reply_text(f"✅ Valor actualizado: Dólar {document['nombre']} - Compra: {document['compra']} / Venta: {document['venta']}")
     except Exception as e:
         print(f"Error al actualizar los valores del dólar: {e}")
@@ -116,6 +121,7 @@ async def get_dolar_from_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tipo = context.args[0].lower() if context.args else "oficial"
     dolar = collection.find_one({"moneda": "USD", "casa": tipo})
 
+    # Si se encontraron datos, enviar el mensaje
     if dolar:
         fecha_actualizacion = dolar['fechaActualizacion']
         fecha_formateada = fecha_actualizacion.strftime("%Y-%m-%d %H:%M")
@@ -131,60 +137,81 @@ async def get_dolar_from_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # Función para almacenar los valores del dólar en la base de datos
-async def store_dolar_values(update):
-    data = get_dolar_values()
-    if data:
-        await update_dolar_values(data, update) 
+async def store_dolar_values(update: Update):
+    try:
+        # Obtener los valores del dólar
+        data = get_dolar_values()
+        if data:
+            print("ℹ️ Datos obtenidos correctamente para almacenar en la base de datos.")
+            # Procesar y almacenar los datos
+            for dolar in data:
+                document = {
+                    "_id": f"{dolar['moneda']}_{dolar['casa']}",
+                    "moneda": dolar["moneda"],
+                    "casa": dolar["casa"],
+                    "nombre": dolar["nombre"],
+                    "compra": dolar["compra"],
+                    "venta": dolar["venta"],
+                    "fechaActualizacion": datetime.strptime(dolar["fechaActualizacion"], "%Y-%m-%dT%H:%M:%S.%fZ"),
+                }
 
-# Función para verificar y notificar cambios en los valores del dólar        
+                # Insertar o actualizar el documento en la base de datos
+                result = collection.update_one({"_id": document["_id"]}, {"$set": document}, upsert=True)
+
+                # Informar al usuario de la actualización
+                if result.upserted_id or result.modified_count > 0:
+                    await update.message.reply_text(
+                        f"✅ Valor actualizado: Dólar {document['nombre']} - "
+                        f"Compra: {document['compra']} / Venta: {document['venta']}"
+                    )
+        else:
+            await update.message.reply_text("⚠️ No se pudieron obtener los valores del dólar.")
+    except Exception as e:
+        print(f"Error al almacenar valores del dólar: {e}")
+        await update.message.reply_text("⚠️ Ocurrió un error al almacenar los valores del dólar.")
+
+
+
+# Función para verificar y notificar cambios en los valores del dólar
 async def check_and_notify_changes(context: CallbackContext):
     try:
-        # Obtener los valores actuales desde la API
+        # Obtener datos de la API
         data = get_dolar_values()
+        if data:
+            # Reutilizar la lógica de almacenamiento
+            for dolar in data:
+                document = {
+                    "_id": f"{dolar['moneda']}_{dolar['casa']}",
+                    "moneda": dolar["moneda"],
+                    "casa": dolar["casa"],
+                    "nombre": dolar["nombre"],
+                    "compra": dolar["compra"],
+                    "venta": dolar["venta"],
+                    "fechaActualizacion": datetime.strptime(dolar["fechaActualizacion"], "%Y-%m-%dT%H:%M:%S.%fZ"),
+                }
 
-        if not data:
-            print("⚠️ No se pudo obtener los datos del dólar.")
-            return
-
-        for dolar in data:
-            # Crear el documento esperado
-            document = {
-                "_id": f"{dolar['moneda']}_{dolar['casa']}",  # Identificador único
-                "moneda": dolar["moneda"],
-                "casa": dolar["casa"],
-                "nombre": dolar["nombre"],
-                "compra": dolar["compra"],
-                "venta": dolar["venta"],
-                "fechaActualizacion": datetime.strptime(dolar["fechaActualizacion"], "%Y-%m-%dT%H:%M:%S.%fZ"),
-            }
-
-            # Buscar el documento existente en la base de datos
-            existing_doc = collection.find_one({"_id": document["_id"]})
-
-            # Compara los valores de compra y venta
-            if existing_doc:
-                if (
-                    existing_doc["compra"] != document["compra"]
-                    or existing_doc["venta"] != document["venta"]
+                # Verificar si existe en la base de datos
+                existing_doc = collection.find_one({"_id": document["_id"]})
+                if existing_doc and (
+                    existing_doc["compra"] != document["compra"] or existing_doc["venta"] != document["venta"]
                 ):
-                    # Si los valores cambiaron, enviar notificación
-                    chat_id = context.job.data["chat_id"]  # Obtener el chat_id desde `data`
+                    # Notificar cambios
                     await context.bot.send_message(
-                        chat_id=chat_id,
+                        chat_id=context.job.data["chat_id"],
                         text=(
                             f"🔔 *Actualización de Dólar {document['nombre']}*\n"
                             f"🟢 Compra: {document['compra']} ARS\n"
                             f"🔴 Venta: {document['venta']} ARS\n"
-                            f"📅 Última actualización: {document['fechaActualizacion']:%Y-%m-%d %H:%M}" 
-                        ), 
-                        parse_mode="Markdown", # Formato Markdown para negritas
+                            f"📅 Última actualización: {document['fechaActualizacion']:%Y-%m-%d %H:%M}"
+                        ),
+                        parse_mode="Markdown",
                     )
 
-            # Actualizar o insertar el documento en la base de datos
-            collection.update_one({"_id": document["_id"]}, {"$set": document}, upsert=True)
-
+                # Almacenar o actualizar en la base de datos
+                collection.update_one({"_id": document["_id"]}, {"$set": document}, upsert=True)
     except Exception as e:
-        print(f"⚠️ Error al verificar y notificar cambios: {e}")
+        print(f"Error en check_and_notify_changes: {e}")
+
 
 async def start_periodic_check(update: Update, context: CallbackContext):
     try:
