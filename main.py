@@ -8,8 +8,8 @@ from telegram.ext import Application, CommandHandler, ContextTypes, CallbackCont
 from pymongo import MongoClient
 from datetime import datetime
 import threading
-import asyncio
-import uvicorn
+import io
+import matplotlib.pyplot as plt
 
 # Cargar las variables de entorno
 load_dotenv()
@@ -54,15 +54,50 @@ def get_dolar_values():
         print(f"Error al obtener datos: {e}")
         return None
 
+
+
 # Obtener los datos de Inflación
-def get_inflacion_data():
+def get_inflation_data():
     try:
         response = requests.get(url_inflacion)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
         print(f"Error al obtener datos: {e}")
-        return None
+        return
+    
+async def enviar_inflacion(update: Update, context: CallbackContext):
+    # Recupera los argumentos de fecha enviados por el usuario
+    args = context.args
+    if len(args) < 2:
+        await update.message.reply_text("Por favor, proporciona dos fechas en el formato 'YYYY-MM-DD YYYY-MM-DD'.")
+        return
+
+    start_date = args[0]
+    end_date = args[1]
+
+    # Validar las fechas
+    try:
+        datetime.strptime(start_date, '%Y-%m-%d')
+        datetime.strptime(end_date, '%Y-%m-%d')
+    except ValueError:
+        await update.message.reply_text("Las fechas deben estar en el formato 'YYYY-MM-DD'.")
+        return
+
+    # Obtener los datos de inflación
+    data = get_inflation_data()
+    if not data:
+        await update.message.reply_text("No se pudieron obtener los datos de inflación.")
+        return
+
+    # Generar el gráfico de inflación en el rango de fechas
+    imagen_buffer = plot_inflation(data, start_date, end_date)
+    
+    if imagen_buffer:
+        await update.message.reply_photo(photo=imagen_buffer, caption=f"Gráfico de la inflación desde {start_date} hasta {end_date}.")
+    else:
+        await update.message.reply_text("No se pudo generar el gráfico de inflación.")
+
 
 # Obtener ultimo dato riesgo pais
 def get_riesgo_pais():
@@ -218,8 +253,8 @@ async def start_periodic_check(update: Update, context: CallbackContext):
         # Inicia el trabajo periódico
         context.job_queue.run_repeating(
             check_and_notify_changes,
-            interval=60,  # Intervalo de 60 segundos
-            first=5,  # Primera ejecución después de 5 segundos
+            interval=10, 
+            first=5,  
             data={"chat_id": update.effective_chat.id},  # Pasar el chat_id como datos
         )
         await update.message.reply_text("🔄 El bot notificará actualizaciones en los valores del dólar.")
@@ -228,6 +263,53 @@ async def start_periodic_check(update: Update, context: CallbackContext):
         await update.message.reply_text("⚠️ Ocurrió un error al iniciar la verificación periódica.")
 
 
+# --------------------------- GRÁFICOS MATPLOTLIB ------------------------------
+
+
+from datetime import datetime
+import matplotlib.pyplot as plt
+import io
+
+def plot_inflation(data, start_date, end_date):
+    if data:
+        # Filtrar los datos según el rango de fechas proporcionado
+        if start_date:
+            data = [item for item in data if datetime.strptime(item["fecha"], '%Y-%m-%d') >= datetime.strptime(start_date, '%Y-%m-%d')]
+        if end_date:
+            data = [item for item in data if datetime.strptime(item["fecha"], '%Y-%m-%d') <= datetime.strptime(end_date, '%Y-%m-%d')]
+
+        if not data:
+            print("No hay datos en el rango de fechas especificado.")
+            return None
+
+        # Descomponer en dos listas, fechas y valores
+        fechas = [datetime.strptime(item["fecha"], '%Y-%m-%d').date() for item in data]
+        valores = [item["valor"] for item in data]
+
+        # Crear el gráfico
+        plt.figure(figsize=(14, 8))
+        plt.plot(fechas, valores, marker='o', color='red', linewidth=2)  # Gráfico de línea
+
+        plt.title(f'Inflación desde {start_date} hasta {end_date}', fontsize=14)
+        plt.xlabel('Fecha', fontsize=12)
+        plt.ylabel('Inflación (%)', fontsize=12)
+        plt.xticks(rotation=45)
+        plt.grid(True)
+        plt.tight_layout()
+
+        # Guardar la imagen en un buffer
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        plt.close()
+
+        return buf  # Devolver el buffer con la imagen
+    else:
+        print("No hay datos para graficar.")
+        return None
+
+
+# --------------------------- FASTAPI ------------------------------
 
 # Rutas de FastAPI
 @APP.get("/")
@@ -245,14 +327,15 @@ def cotizacion_dolar():
         return {"error": "No se pudo obtener el valor del dólar."}
     return {"data": data}
 
-@APP.get("/inflacion")
+
+@APP.post("/inflacion")
 def obtener_inflacion():
-    fecha_inicio = '2023-12-10'
-    fecha_hoy_str = datetime.now().strftime('%Y-%m-%d')
-    data = get_inflacion_data()
-    if data and 'results' in data:
-        return [{"fecha": item['fecha'], "valor": item['valor']} for item in data['results']]
-    return {"error": "No se pudo obtener los datos de inflación."}
+    data = get_inflation_data()
+    if data:
+        return {"data": data}
+    return {"error": "No se pudo obtener la inflación."}
+
+
 
 @APP.get("/riesgo_pais")
 def obtener_riesgo_pais():
@@ -261,10 +344,6 @@ def obtener_riesgo_pais():
         return {"data": data}
     return {"error": "No se pudo obtener el riesgo país."}
 
-async def start_services():
-    bot_task = asyncio.create_task(APP.run_polling())
-    fastapi_task = asyncio.create_task(uvicorn.run(APP, host="127.0.0.1", port=8000))
-    await asyncio.gather(bot_task, fastapi_task)
 
 
 # Función principal de Telegram
@@ -278,15 +357,17 @@ def main():
     app.add_handler(CommandHandler("help", help))
     app.add_handler(CommandHandler("dolar", get_dolar_from_db))
     app.add_handler(CommandHandler("check_dolar", start_periodic_check))
+    app.add_handler(CommandHandler("inflacion", enviar_inflacion))
+
+    
     
     import uvicorn
     
     port = int(os.environ.get("PORT", 8000))
-    threading.Thread(target=lambda: uvicorn.run(APP, host="0.0.0.0", port=port)).start()
+    threading.Thread(target=lambda: uvicorn.run(APP, host="127.0.0.1", port=port)).start()
 
     # Ejecutar el bot
     app.run_polling()
 
 if __name__ == "__main__":
     main()
-    asyncio.run(start_services())
