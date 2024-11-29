@@ -364,7 +364,7 @@ def main():
     import uvicorn
     
     port = int(os.environ.get("PORT", 8000))
-    threading.Thread(target=lambda: uvicorn.run(APP, host="127.0.0.1", port=port)).start()
+    threading.Thread(target=lambda: uvicorn.run(APP, host="0.0.0.0", port=port)).start()
 
     # Ejecutar el bot
     app.run_polling()
