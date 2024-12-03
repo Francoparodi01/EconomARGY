@@ -189,7 +189,7 @@ async def obtener_todos_los_dolares(update: Update, context: CallbackContext):
             mensaje += f"🏠 Dolar: {nombre} \n"
             mensaje += f"💰 Compra: {compra:.2f} ARS\n"
             mensaje += f"💸 Venta: {venta:.2f} ARS\n"
-            mensaje += f"📅 última actualización: {fecha_formateada}"
+            mensaje += f"📅 última actualización: {fecha_formateada}\n\n"
 
         # Verificar el límite de caracteres de Telegram y enviar el mensaje
         if len(mensaje) > 4096:
