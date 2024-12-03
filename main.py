@@ -309,7 +309,7 @@ async def start_periodic_check(update: Update, context: CallbackContext):
         # Inicia el trabajo periódico
         context.job_queue.run_repeating(
             check_and_notify_changes,
-            interval=10, 
+            interval=1, 
             first=5,  
             data={"chat_id": update.effective_chat.id},  # Pasar el chat_id como datos
         )
