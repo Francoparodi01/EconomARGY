@@ -24,7 +24,6 @@ chat_id_user = os.getenv("chat_id_user")
 url_inflacion = os.getenv("url_inflacion")
 MONGO_URI = os.getenv("MONGO_URI")
 url_riesgo_pais = os.getenv("url_riesgo_pais")
-port = int(os.getenv("PORT", 5000))
 
 # Verificar que todas las variables estén definidas
 if not all([telegram_token, chat_id, url_ambito, chat_id_user, url_inflacion, MONGO_URI, url_riesgo_pais]):
