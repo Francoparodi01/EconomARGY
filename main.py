@@ -1,6 +1,5 @@
 import os
 import requests
-from fastapi import FastAPI, Response
 from dotenv import load_dotenv
 from telegram import Bot, Update
 from telegram.ext import Application, CommandHandler, ContextTypes, CallbackContext
@@ -13,9 +12,6 @@ from datetime import datetime, timedelta
 
 # Cargar las variables de entorno
 load_dotenv()
-
-# Crear la aplicación FastAPI
-APP = FastAPI()
 
 # Variables globales
 telegram_token = os.getenv("Telegram_Token")
@@ -400,42 +396,6 @@ def plot_inflation(data, start_date, end_date):
 
     return buf
 
-# --------------------------- FASTAPI ------------------------------
-
-# Rutas de FastAPI
-@APP.get("/")
-def welcome():
-    return {"message": "¡Bienvenido al servidor de cotizaciones!"}
-
-@APP.head("/")
-async def read_root_head():
-    return Response(status_code=200)
-
-@APP.get("/dolares")
-def cotizacion_dolar():
-    data = get_dolar_values()
-    if not data:
-        return {"error": "No se pudo obtener el valor del dólar."}
-    return {"data": data}
-
-
-@APP.post("/inflacion")
-def obtener_inflacion():
-    data = get_inflation_data()
-    if data:
-        return {"data": data}
-    return {"error": "No se pudo obtener la inflación."}
-
-
-
-@APP.get("/riesgo_pais")
-def obtener_riesgo_pais():
-    data = get_riesgo_pais()
-    if data:
-        return {"data": data}
-    return {"error": "No se pudo obtener el riesgo país."}
-
-
 
 # Función principal de Telegram
 def main():
@@ -452,13 +412,6 @@ def main():
     app.add_handler(CommandHandler("inflacion", enviar_inflacion))
 
     
-    
-    import uvicorn
-    
-    port = int(os.environ.get("PORT", 8000))
-    threading.Thread(target=lambda: uvicorn.run(APP, host="0.0.0.0", port=port)).start()
-
-    # Ejecutar el bot
     app.run_polling()
 
 if __name__ == "__main__":
