@@ -306,15 +306,16 @@ async def check_and_notify_changes(context: CallbackContext):
 
 async def start_periodic_check(update: Update, context: CallbackContext):
     try:
-        # Inicia el trabajo periódico
+        
         context.job_queue.run_repeating(
             check_and_notify_changes,
-            interval=1, 
+            interval=60, 
             first=5,  
-            data={"chat_id": update.effective_chat.id},  # Pasar el chat_id como datos
+            data={"chat_id": update.effective_chat.id} 
         )
         await update.message.reply_text("🔄 El bot notificará actualizaciones en los valores del dólar.")
     except Exception as e:
+        # Muestra un error si algo falla
         print(f"⚠️ Error al iniciar la verificación periódica: {e}")
         await update.message.reply_text("⚠️ Ocurrió un error al iniciar la verificación periódica.")
 
