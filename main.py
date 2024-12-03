@@ -5,10 +5,11 @@ from telegram import Bot, Update
 from telegram.ext import Application, CommandHandler, ContextTypes, CallbackContext
 from pymongo import MongoClient
 from datetime import datetime
-import threading
 import io
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
+from flask import Flask
+
 
 # Cargar las variables de entorno
 load_dotenv()
@@ -22,6 +23,7 @@ chat_id_user = os.getenv("chat_id_user")
 url_inflacion = os.getenv("url_inflacion")
 MONGO_URI = os.getenv("MONGO_URI")
 url_riesgo_pais = os.getenv("url_riesgo_pais")
+port = int(os.getenv("PORT", 5000))
 
 # Verificar que todas las variables estén definidas
 if not all([telegram_token, chat_id, url_ambito, chat_id_user, url_inflacion, MONGO_URI, url_riesgo_pais]):
@@ -396,6 +398,14 @@ def plot_inflation(data, start_date, end_date):
 
     return buf
 
+app = Flask(__name__)
+
+
+@app.route("/")
+def index():
+    return "Bot is running"
+
+
 
 # Función principal de Telegram
 def main():
@@ -415,4 +425,5 @@ def main():
     app.run_polling()
 
 if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=port | 5000)
     main()
