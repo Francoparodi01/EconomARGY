@@ -8,7 +8,8 @@ from datetime import datetime
 import io
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
-from flask import Flask
+from fastapi import FastAPI, Response
+import threading
 
 
 # Cargar las variables de entorno
@@ -37,6 +38,9 @@ client = MongoClient(MONGO_URI)
 db = client["cotizaciones"]
 collection = db["dolar"]
 collection_diario = db["dolar_diario"]
+
+# Crear la aplicación FastAPI
+APP = FastAPI()
 
 # Obtener los datos de Ambito
 def get_dolar_values():
@@ -398,12 +402,40 @@ def plot_inflation(data, start_date, end_date):
 
     return buf
 
-app = Flask(__name__)
+# --------------------------- FASTAPI ------------------------------
+
+# Rutas de FastAPI
+@APP.get("/")
+def welcome():
+    return {"message": "¡Bienvenido al servidor de cotizaciones!"}
+
+@APP.head("/")
+async def read_root_head():
+    return Response(status_code=200)
+
+@APP.get("/dolares")
+def cotizacion_dolar():
+    data = get_dolar_values()
+    if not data:
+        return {"error": "No se pudo obtener el valor del dólar."}
+    return {"data": data}
 
 
-@app.route("/")
-def index():
-    return "Bot is running"
+@APP.post("/inflacion")
+def obtener_inflacion():
+    data = get_inflation_data()
+    if data:
+        return {"data": data}
+    return {"error": "No se pudo obtener la inflación."}
+
+
+
+@APP.get("/riesgo_pais")
+def obtener_riesgo_pais():
+    data = get_riesgo_pais()
+    if data:
+        return {"data": data}
+    return {"error": "No se pudo obtener el riesgo país."}
 
 
 
@@ -424,6 +456,13 @@ def main():
     
     app.run_polling()
 
+    import uvicorn
+    
+    port = int(os.environ.get("PORT", 8000))
+    threading.Thread(target=lambda: uvicorn.run(APP, host="0.0.0.0", port=port)).start()
+
+    # Ejecutar el bot
+    app.run_polling()
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=port | 5000)
     main()
