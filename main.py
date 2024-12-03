@@ -453,8 +453,6 @@ def main():
     app.add_handler(CommandHandler("inflacion", enviar_inflacion))
 
     
-    app.run_polling()
-
     import uvicorn
     
     port = int(os.environ.get("PORT", 8000))
